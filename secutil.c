@@ -11,39 +11,59 @@
 #include "project.h"
 
 
-// Process starting function
-void StartProcess()
+// set promisc mode on the specific NIC
+void nicsetpromisc(UINT num, char **arg)
 {
-	// Start the server
-	Debug("StartProcess() Begin.\n");
+	if (num < 1)
+	{
+		Print("Usage: nicsetpromisc <NICNAME>\n");
+	}
+	else
+	{
+		char *nicname = arg[0];
+		ETH *e;
 
-	Debug("StartProcess() End.\n");
+		InitEth();
+
+		e = OpenEth(nicname, false, false, NULL);
+		if (e == NULL)
+		{
+			Print("OpenEth Error.\n");
+
+			FreeEth();
+		}
+		else
+		{
+			UCHAR *buf;
+			Print("Started.\n");
+			EthGetPacket(e, &buf);
+			SleepThread(INFINITE);
+		}
+	}
 }
 
-// Process termination function
-void StopProcess()
+// list the NICs on the system
+void niclist(UINT num, char **arg)
 {
-	// Stop the server
-	Debug("StopProcess() Begin.\n");
+	TOKEN_LIST *t;
+	UINT i;
 
-	Debug("StopProcess() End.\n");
+	InitEth();
+
+	t = GetEthList();
+
+	Print("----------\n");
+	for (i = 0;i < t->NumTokens;i++)
+	{
+		Print("%s\n", t->Token[i]);
+	}
+	Print("----------\n");
+
+	FreeToken(t);
+
+	FreeEth();
 }
 
-// Service test
-void service_test(UINT num, char **arg)
-{
-	Print("Starting...\n");
-	StartProcess();
-
-	Print("Service started.\n");
-	Print("Press Enter key to stop the service.\n");
-
-	GetLine(NULL, 0);
-
-	Print("Stopping...\n");
-	StopProcess();
-	Print("Service stopped.\n");
-}
 
 // Test function definition list
 void test(UINT num, char **arg)
@@ -68,7 +88,8 @@ typedef struct TEST_LIST
 TEST_LIST test_list[] =
 {
 	{ "test", test },
-	{ "ss", service_test },
+	{ "niclist", niclist },
+	{ "nicsetpromisc", nicsetpromisc },
 };
 
 // Test function
@@ -108,6 +129,16 @@ void TestMain(char *cmd)
 			{
 				FreeToken(token);
 				break;
+			}
+			else if (StrCmpi(cmd, "?") == 0 || StrCmpi(cmd, "help") == 0)
+			{
+				num = sizeof(test_list) / sizeof(TEST_LIST);
+				Print("Available %u commands:\n", num);
+				for (i = 0;i < num;i++)
+				{
+					Print(" %s\n", test_list[i].command_str);
+				}
+				Print("\n");
 			}
 			else
 			{
@@ -153,71 +184,21 @@ void TestMain(char *cmd)
 int main(int argc, char *argv[])
 {
 	bool memchk = false;
-	UINT i;
 	char cmd[MAX_SIZE];
-	char *s;
-	bool is_service_mode = false;
 
 	cmd[0] = 0;
-	if (argc >= 2)
-	{
-		char *second_arg = argv[1];
 
-		if (StrCmpi(second_arg, "start") == 0 || StrCmpi(second_arg, "stop") == 0 || StrCmpi(second_arg, "execsvc") == 0 || StrCmpi(second_arg, "help") == 0 ||
-			(second_arg[0] == '/' && StrCmpi(second_arg, "/memcheck") != 0))
-		{
-			// service mode
-			is_service_mode = true;
-		}
+	SetHamMode();
 
-		if (is_service_mode == false)
-		{
-			for (i = 1;i < (UINT)argc;i++)
-			{
-				s = argv[i];
-				if (s[0] == '/')
-				{
-					if (!StrCmpi(s, "/memcheck"))
-					{
-						memchk = true;
-					}
-				}
-				else
-				{
-					StrCpy(cmd, sizeof(cmd), &s[0]);
-				}
-			}
-		}
-	}
+	InitMayaqua(memchk, true, argc, argv);
+	EnableProbe(false);
+	InitCedar();
+	SetHamMode();
 
-	if (is_service_mode == false)
-	{
-		// Test mode
+	TestMain(cmdline);
 
-		//MayaquaMinimalMode();
-
-		SetHamMode();
-
-		InitMayaqua(memchk, true, argc, argv);
-		EnableProbe(false);
-		InitCedar();
-		SetHamMode();
-
-		TestMain(cmdline);
-
-		FreeCedar();
-		FreeMayaqua();
-	}
-	else
-	{
-		// Service mode
-#ifdef OS_WIN32
-		return MsService("SECAPP", StartProcess, StopProcess, 0, argv[1]);
-#else // OS_WIN32
-		return UnixService(argc, argv, "secapp", StartProcess, StopProcess);
-#endif // OS_WIN32
-
-	}
+	FreeCedar();
+	FreeMayaqua();
 
 	return 0;
 }
